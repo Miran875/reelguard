@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">ReelGuard</string>
+    <string name="service_desc">Counts reels and short videos as you swipe in Instagram, YouTube, TikTok and Facebook, and shows a progress bar. Nothing leaves your phone.</string>
+</resources>
