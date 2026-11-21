@@ -35,6 +35,9 @@ class ReelAccessibilityService : AccessibilityService() {
     private lateinit var fill: View
     private lateinit var label: TextView
     private var lastCount = 0L
+    private var lastEventTime = 0L
+    private var acc = 0
+    private var counted = false
     private var shown = false
 
     override fun onServiceConnected() {
@@ -56,17 +59,22 @@ class ReelAccessibilityService : AccessibilityService() {
             AccessibilityEvent.TYPE_VIEW_SCROLLED -> {
                 if (keywords == null) return
                 val now = System.currentTimeMillis()
-                if (now - lastCount < 800) return          // one swipe fires many events
-                // Swipe-length / page-index filter. Fields may be missing on some apps (0 / -1): then fall back.
+                val h = resources.displayMetrics.heightPixels
                 val dy = if (Build.VERSION.SDK_INT >= 28) Math.abs(e.scrollDeltaY) else 0
-                val pageChanged = e.fromIndex >= 0 && e.toIndex >= 0 && e.fromIndex != e.toIndex
-                val big = dy >= resources.displayMetrics.heightPixels * 0.4f
-                ReelStore.lastEvent.value = "$pkg dy=$dy from=${e.fromIndex} to=${e.toIndex}"
-                if (dy > 0 && !big && !pageChanged) return  // small scroll: feed or comments, not a reel swipe
-                if (keywords.isNotEmpty() && !inReels(keywords)) return
-                lastCount = now
-                ReelStore.refresh()
-                warn(ReelStore.increment(), ReelStore.limit.value)
+                val src = e.source
+                val chain = idChain(src)
+                ReelStore.lastEvent.value = "$pkg dy=$dy from=${e.fromIndex} to=${e.toIndex} cls=${src?.className?.toString()?.substringAfterLast('.')} ids=$chain"
+                if (now - lastEventTime > 500) { acc = 0; counted = false }   // new swipe starts after a pause
+                lastEventTime = now
+                // Only the scrolled view (or its parents) may be the reels/shorts player.
+                if (keywords.isNotEmpty() && keywords.none { k -> chain.contains(k, ignoreCase = true) }) return
+                if (counted) return
+                acc += dy
+                if (dy == 0 || acc >= h * 0.25f) {      // dy==0: app does not report distance
+                    counted = true
+                    ReelStore.refresh()
+                    warn(ReelStore.increment(), ReelStore.limit.value)
+                }
             }
         }
     }
@@ -82,6 +90,18 @@ class ReelAccessibilityService : AccessibilityService() {
             return false
         }
         return walk(r, 0)
+    }
+
+    private fun idChain(n: AccessibilityNodeInfo?): String {
+        val out = ArrayList<String>()
+        var cur = n
+        var i = 0
+        while (cur != null && i < 6) {
+            cur.viewIdResourceName?.let { out.add(it.substringAfter(":id/")) }
+            cur = cur.parent
+            i++
+        }
+        return out.joinToString(">")
     }
 
     private fun warn(c: Int, l: Int) {

@@ -38,10 +38,11 @@ object ReelStore {
         limit.value = n
     }
 
-    /** Green -> amber -> red as ratio goes 0 -> 0.6 -> 1. */
+    /** Emerald -> amber -> crimson as ratio goes 0 -> 0.6 -> 1. */
     fun colorFor(ratio: Float): Int {
         val r = ratio.coerceIn(0f, 1f)
-        val hue = if (r < 0.6f) 135f - (r / 0.6f) * 90f else 45f - ((r - 0.6f) / 0.4f) * 45f
-        return Color.HSVToColor(floatArrayOf(hue, 0.85f, 0.9f))
+        val green = 0xFF34D399.toInt(); val amber = 0xFFFBBF24.toInt(); val red = 0xFFEF4444.toInt()
+        return if (r < 0.6f) androidx.core.graphics.ColorUtils.blendARGB(green, amber, r / 0.6f)
+        else androidx.core.graphics.ColorUtils.blendARGB(amber, red, (r - 0.6f) / 0.4f)
     }
 }
