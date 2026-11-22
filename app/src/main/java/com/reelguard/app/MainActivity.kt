@@ -32,6 +32,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -44,11 +48,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 
-internal val Bg = Color(0xFF0A0E16)
-internal val Card = Color(0xFF121826)
-internal val Line = Color(0xFF232C3F)
-internal val TextHi = Color(0xFFF1F4FA)
-internal val TextLo = Color(0xFF8B96AB)
+internal val Bg = Color(0xFFF4F6F8)
+internal val Card = Color(0xFFFFFFFF)
+internal val Line = Color(0xFFE3E8EE)
+internal val TextHi = Color(0xFF14202B)
+internal val TextLo = Color(0xFF64748B)
+internal val OnAccent = Color(0xFF0B1F18)
 internal val Light = FontFamily(Typeface.create("sans-serif-light", Typeface.NORMAL))
 internal val Medium = FontFamily(Typeface.create("sans-serif-medium", Typeface.NORMAL))
 
@@ -61,11 +66,11 @@ class MainActivity : ComponentActivity() {
         ReelStore.init(this)
         tab.intValue = intent.getIntExtra("tab", 0)
         enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
-            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+            statusBarStyle = SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT)
         )
         setContent {
-            MaterialTheme(colorScheme = darkColorScheme(background = Bg, surface = Bg, onSurface = TextHi)) {
+            MaterialTheme(colorScheme = lightColorScheme(background = Bg, surface = Bg, onSurface = TextHi)) {
                 Surface(Modifier.fillMaxSize(), color = Bg) {
                     val consent by ReelStore.consent.collectAsState()
                     var skipped by remember { mutableStateOf(false) }
@@ -106,11 +111,11 @@ private fun Pill(text: String, selected: Boolean, accent: Color, onClick: () -> 
 }
 
 @Composable
-private fun StepButton(label: String, onClick: () -> Unit) {
+private fun StepButton(label: String, enabled: Boolean, onClick: () -> Unit) {
     Box(
-        Modifier.size(44.dp).clip(CircleShape).border(1.dp, Line, CircleShape).clickable(onClick = onClick),
+        Modifier.size(44.dp).clip(CircleShape).border(1.dp, Line, CircleShape).clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center
-    ) { Text(label, fontSize = 22.sp, color = TextHi, fontFamily = Light) }
+    ) { Text(label, fontSize = 22.sp, color = if (enabled) TextHi else TextLo.copy(alpha = 0.35f), fontFamily = Light) }
 }
 
 @Composable
@@ -122,6 +127,7 @@ fun Home(serviceOn: Boolean, openSettings: () -> Unit) {
     val sweep by animateFloatAsState(ratio.coerceIn(0f, 1f), tween(600), label = "sweep")
     val glow by rememberInfiniteTransition(label = "glow").animateFloat(0.05f, 0.28f, infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "glowA")
     val last by ReelStore.lastEvent.collectAsState()
+    val haptic = LocalHapticFeedback.current
     val feed by ReelStore.feed.collectAsState()
     val scanInfo by ReelStore.scanInfo.collectAsState()
 
@@ -132,7 +138,7 @@ fun Home(serviceOn: Boolean, openSettings: () -> Unit) {
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("REELGUARD", fontFamily = Medium, fontSize = 13.sp, letterSpacing = 3.sp, color = TextLo, modifier = Modifier.weight(1f))
-            val dot = if (serviceOn) Color(0xFF34D399) else Color(0xFFEF4444)
+            val dot = if (serviceOn) Color(0xFF10B981) else Color(0xFFEF4444)
             Row(
                 Modifier.clip(RoundedCornerShape(50)).border(1.dp, Line, RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -146,14 +152,14 @@ fun Home(serviceOn: Boolean, openSettings: () -> Unit) {
         if (!serviceOn) {
             Column(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Card)
-                    .border(BorderStroke(1.dp, Color(0xFFFBBF24).copy(alpha = 0.5f)), RoundedCornerShape(20.dp)).padding(18.dp),
+                    .border(BorderStroke(1.dp, Color(0xFFF59E0B).copy(alpha = 0.5f)), RoundedCornerShape(20.dp)).padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text("Turn on tracking", fontFamily = Medium, fontSize = 16.sp, color = TextHi)
                 Text("Enable ReelGuard under Installed apps in Accessibility settings so it can count your swipes.", fontSize = 14.sp, color = TextLo)
                 Button(
                     onClick = openSettings,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFBBF24), contentColor = Bg),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF59E0B), contentColor = OnAccent),
                     shape = RoundedCornerShape(12.dp)
                 ) { Text("Open settings", fontFamily = Medium) }
             }
@@ -186,34 +192,65 @@ fun Home(serviceOn: Boolean, openSettings: () -> Unit) {
             fontFamily = Medium, fontSize = 16.sp, color = TextHi, textAlign = TextAlign.Center
         )
 
+        val secs by ReelStore.scrollSecs.collectAsState()
+        val breaksToday by ReelStore.breaks.collectAsState()
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            StatTile("Time on reels", fmtTime(secs), "estimate", Modifier.weight(1.4f))
+            StatTile("Breaks taken", "$breaksToday", "today", Modifier.weight(1f))
+        }
+
         Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Card).border(1.dp, Line, RoundedCornerShape(24.dp)).padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Daily limit", fontFamily = Medium, fontSize = 15.sp, color = TextLo, modifier = Modifier.weight(1f))
-                StepButton("\u2212") { ReelStore.setLimit(limit - 5) }
+                StepButton("\u2212", limit > ReelStore.MIN_LIMIT) { ReelStore.setLimit(limit - 5) }
                 Text("$limit", fontFamily = Light, fontSize = 34.sp, color = TextHi, textAlign = TextAlign.Center, modifier = Modifier.widthIn(min = 84.dp))
-                StepButton("+") { ReelStore.setLimit(limit + 5) }
+                StepButton("+", limit < ReelStore.MAX_LIMIT) { ReelStore.setLimit(limit + 5) }
             }
             Slider(
                 value = limit.toFloat().coerceIn(5f, 300f),
-                onValueChange = { ReelStore.setLimit((it / 5f).roundToInt() * 5) },
-                valueRange = 5f..300f,
+                onValueChange = {
+                    val n = (it / 5f).roundToInt() * 5
+                    if (n != limit) { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); ReelStore.setLimit(n) }
+                },
+                valueRange = ReelStore.MIN_LIMIT.toFloat()..ReelStore.MAX_LIMIT.toFloat(),
                 steps = 58,
                 colors = SliderDefaults.colors(
                     thumbColor = accent, activeTrackColor = accent, inactiveTrackColor = Line,
                     activeTickColor = Color.Transparent, inactiveTickColor = Color.Transparent
                 )
             )
+            Row(Modifier.fillMaxWidth()) {
+                Text("${ReelStore.MIN_LIMIT}", fontSize = 12.sp, color = TextLo, modifier = Modifier.weight(1f))
+                Text("${ReelStore.MAX_LIMIT} max", fontSize = 12.sp, color = TextLo)
+            }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(20, 30, 50, 100).forEach { Pill("$it", limit == it, accent) { ReelStore.setLimit(it) } }
             }
         }
 
-        TextButton(onClick = { ReelStore.reset() }) {
-            Text("Reset today\u2019s count", fontFamily = Medium, color = TextLo)
+        var confirmReset by remember { mutableStateOf(false) }
+        OutlinedButton(
+            onClick = { confirmReset = true },
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            shape = RoundedCornerShape(14.dp),
+            border = BorderStroke(1.dp, Line),
+            colors = ButtonDefaults.outlinedButtonColors(containerColor = Card, contentColor = TextHi)
+        ) {
+            Icon(Icons.Rounded.Refresh, null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Reset today\u2019s count", fontFamily = Medium, fontSize = 15.sp)
         }
+        if (confirmReset) AlertDialog(
+            onDismissRequest = { confirmReset = false },
+            containerColor = Card,
+            title = { Text("Reset today\u2019s count?", fontFamily = Medium, color = TextHi) },
+            text = { Text("Reels, feed videos and time for today will go back to zero.", color = TextLo) },
+            confirmButton = { TextButton(onClick = { ReelStore.reset(); confirmReset = false }) { Text("Reset", fontFamily = Medium, color = Color(0xFFEF4444)) } },
+            dismissButton = { TextButton(onClick = { confirmReset = false }) { Text("Cancel", fontFamily = Medium, color = TextLo) } }
+        )
         Row(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Card).border(1.dp, Line, RoundedCornerShape(20.dp)).padding(horizontal = 20.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -242,7 +279,7 @@ private fun Screen(content: @Composable ColumnScope.() -> Unit) {
 @Composable
 private fun Point(title: String, body: String) {
     Row(verticalAlignment = Alignment.Top) {
-        Box(Modifier.padding(top = 7.dp).size(8.dp).clip(CircleShape).background(Color(0xFF34D399)))
+        Box(Modifier.padding(top = 7.dp).size(8.dp).clip(CircleShape).background(Color(0xFF10B981)))
         Spacer(Modifier.width(14.dp))
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(title, fontFamily = Medium, fontSize = 16.sp, color = TextHi)
@@ -279,7 +316,7 @@ fun Disclosure(onAgree: () -> Unit, onDecline: () -> Unit) {
         Spacer(Modifier.height(8.dp))
         Button(
             onClick = onAgree, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(14.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF34D399), contentColor = Bg)
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981), contentColor = OnAccent)
         ) { Text("Agree and continue", fontFamily = Medium, fontSize = 16.sp) }
         TextButton(onClick = onDecline, modifier = Modifier.fillMaxWidth()) { Text("Not now", fontFamily = Medium, color = TextLo) }
     }
@@ -310,7 +347,7 @@ fun Setup(openSettings: () -> Unit, onSkip: () -> Unit) {
         Spacer(Modifier.height(8.dp))
         Button(
             onClick = openSettings, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(14.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF34D399), contentColor = Bg)
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981), contentColor = OnAccent)
         ) { Text("Open settings", fontFamily = Medium, fontSize = 16.sp) }
         OutlinedButton(
             onClick = { tts?.speak(script, TextToSpeech.QUEUE_FLUSH, null, "guide") },
@@ -318,5 +355,24 @@ fun Setup(openSettings: () -> Unit, onSkip: () -> Unit) {
             border = BorderStroke(1.dp, Line)
         ) { Text("Play audio guide", fontFamily = Medium, fontSize = 16.sp, color = TextHi) }
         TextButton(onClick = onSkip, modifier = Modifier.fillMaxWidth()) { Text("Skip for now", fontFamily = Medium, color = TextLo) }
+    }
+}
+
+
+internal fun fmtTime(s: Int): String {
+    val h = s / 3600
+    val m = (s % 3600) / 60
+    return if (h > 0) "${h}h ${m}m" else if (m > 0) "${m}m" else "${s}s"
+}
+
+@Composable
+private fun StatTile(label: String, value: String, note: String, modifier: Modifier) {
+    Column(
+        modifier.clip(RoundedCornerShape(20.dp)).background(Card).border(1.dp, Line, RoundedCornerShape(20.dp)).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Text(label, fontFamily = Medium, fontSize = 13.sp, color = TextLo)
+        Text(value, fontFamily = Light, fontSize = 34.sp, color = TextHi)
+        Text(note, fontSize = 11.sp, color = TextLo)
     }
 }

@@ -34,7 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 
-private val Green = Color(0xFF34D399)
+private val Green = Color(0xFF10B981)
 
 @Composable
 fun MainShell(serviceOn: Boolean, tab: Int, onTab: (Int) -> Unit, openSettings: () -> Unit) {
@@ -153,7 +153,7 @@ fun RelaxScreen() {
         Button(
             onClick = { if (running) running = false else { cycles = 0; running = true } },
             modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(14.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = if (running) Line else Green, contentColor = if (running) TextHi else Bg)
+            colors = ButtonDefaults.buttonColors(containerColor = if (running) Line else Green, contentColor = if (running) TextHi else OnAccent)
         ) { Text(if (running) "Stop" else "Start breathing", fontFamily = Medium, fontSize = 16.sp) }
         if (running) Text("Breaths: $cycles", fontSize = 13.sp, color = TextLo, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
 
@@ -186,8 +186,9 @@ fun RelaxScreen() {
 @Composable
 fun LearnScreen() {
     val count by ReelStore.count.collectAsState()
-    val mins = count * 25 / 60f
-    val monthHours = count * 30 * 25 / 3600f
+    val secs by ReelStore.scrollSecs.collectAsState()
+    val mins = secs / 60f
+    val monthHours = secs * 30 / 3600f
     TabScreen {
         Text("LEARN", fontFamily = Medium, fontSize = 13.sp, letterSpacing = 3.sp, color = TextLo)
         Text("Why it matters", fontFamily = Light, fontSize = 30.sp, color = TextHi)
@@ -203,7 +204,7 @@ fun LearnScreen() {
                 "At today\u2019s pace that is about %.1f hours a month.".format(monthHours),
                 fontFamily = Medium, fontSize = 15.sp, color = Green, modifier = Modifier.padding(top = 8.dp)
             )
-            Text("Estimate based on about 25 seconds per reel. Yours may differ.", fontSize = 12.sp, color = TextLo)
+            Text("Estimated from the time between your reels.", fontSize = 12.sp, color = TextLo)
         }
 
         Text("What research says", fontFamily = Medium, fontSize = 16.sp, color = TextHi)

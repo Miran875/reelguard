@@ -201,21 +201,21 @@ class ReelAccessibilityService : AccessibilityService() {
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding((22 * d).toInt(), (22 * d).toInt(), (22 * d).toInt(), (18 * d).toInt())
-            background = GradientDrawable().apply { cornerRadius = 24 * d; setColor(0xFF121826.toInt()); setStroke((1 * d).toInt(), 0xFF232C3F.toInt()) }
+            background = GradientDrawable().apply { cornerRadius = 24 * d; setColor(0xFFFFFFFF.toInt()); setStroke((1 * d).toInt(), 0xFFE3E8EE.toInt()) }
         }
-        card.addView(tv("Time for a breather", 20f, 0xFFF1F4FA.toInt(), true))
-        card.addView(tv("You\u2019ve scrolled for about $mins minutes today (${ReelStore.count.value} reels).", 14f, 0xFF8B96AB.toInt())
+        card.addView(tv("Time for a breather", 20f, 0xFF14202B.toInt(), true))
+        card.addView(tv("You\u2019ve scrolled for about $mins minutes today (${ReelStore.count.value} reels).", 14f, 0xFF64748B.toInt())
             .apply { setPadding(0, (8 * d).toInt(), 0, (14 * d).toInt()) })
-        card.addView(tv("Try instead:  ${ideas.random()}", 16f, 0xFF34D399.toInt()).apply { setPadding(0, 0, 0, (18 * d).toInt()) })
+        card.addView(tv("Try instead:  ${ideas.random()}", 16f, 0xFF0E9F6E.toInt()).apply { setPadding(0, 0, 0, (18 * d).toInt()) })
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        row.addView(btn("Take a break", 0xFF34D399.toInt(), 0xFF0A0E16.toInt()) {
+        row.addView(btn("Take a break", 0xFF10B981.toInt(), 0xFF0B1F18.toInt()) {
             hideBreakCard()
             try {
                 startActivity(Intent(this, MainActivity::class.java)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra("tab", 1))
             } catch (_: Exception) {}
         }, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = (10 * d).toInt() })
-        row.addView(btn("Keep scrolling", 0xFF232C3F.toInt(), 0xFFF1F4FA.toInt()) { hideBreakCard() }, LinearLayout.LayoutParams(0, -2, 1f))
+        row.addView(btn("Keep scrolling", 0xFFE9EEF3.toInt(), 0xFF14202B.toInt()) { hideBreakCard() }, LinearLayout.LayoutParams(0, -2, 1f))
         card.addView(row)
         val lp = WindowManager.LayoutParams(
             (resources.displayMetrics.widthPixels * 0.9f).toInt(), -2, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
