@@ -4,12 +4,17 @@ import android.content.Intent
 import android.graphics.Typeface
 import android.os.Bundle
 import android.provider.Settings
+import android.speech.tts.TextToSpeech
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -26,6 +31,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -38,20 +44,22 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 
-private val Bg = Color(0xFF0A0E16)
-private val Card = Color(0xFF121826)
-private val Line = Color(0xFF232C3F)
-private val TextHi = Color(0xFFF1F4FA)
-private val TextLo = Color(0xFF8B96AB)
-private val Light = FontFamily(Typeface.create("sans-serif-light", Typeface.NORMAL))
-private val Medium = FontFamily(Typeface.create("sans-serif-medium", Typeface.NORMAL))
+internal val Bg = Color(0xFF0A0E16)
+internal val Card = Color(0xFF121826)
+internal val Line = Color(0xFF232C3F)
+internal val TextHi = Color(0xFFF1F4FA)
+internal val TextLo = Color(0xFF8B96AB)
+internal val Light = FontFamily(Typeface.create("sans-serif-light", Typeface.NORMAL))
+internal val Medium = FontFamily(Typeface.create("sans-serif-medium", Typeface.NORMAL))
 
 class MainActivity : ComponentActivity() {
     private val serviceOn = mutableStateOf(false)
+    private val tab = mutableIntStateOf(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ReelStore.init(this)
+        tab.intValue = intent.getIntExtra("tab", 0)
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
@@ -59,10 +67,22 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme(colorScheme = darkColorScheme(background = Bg, surface = Bg, onSurface = TextHi)) {
                 Surface(Modifier.fillMaxSize(), color = Bg) {
-                    Home(serviceOn.value) { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+                    val consent by ReelStore.consent.collectAsState()
+                    var skipped by remember { mutableStateOf(false) }
+                    val open = { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+                    when {
+                        !consent -> Disclosure(onAgree = { ReelStore.setConsent(true) }, onDecline = { finishAffinity() })
+                        !serviceOn.value && !skipped -> Setup(open, onSkip = { skipped = true })
+                        else -> MainShell(serviceOn.value, tab.intValue, { tab.intValue = it }, open)
+                    }
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        tab.intValue = intent.getIntExtra("tab", tab.intValue)
     }
 
     override fun onResume() {
@@ -100,10 +120,13 @@ fun Home(serviceOn: Boolean, openSettings: () -> Unit) {
     val ratio = count.toFloat() / limit
     val accent by animateColorAsState(Color(ReelStore.colorFor(ratio)), tween(500), label = "accent")
     val sweep by animateFloatAsState(ratio.coerceIn(0f, 1f), tween(600), label = "sweep")
+    val glow by rememberInfiniteTransition(label = "glow").animateFloat(0.05f, 0.28f, infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "glowA")
     val last by ReelStore.lastEvent.collectAsState()
+    val feed by ReelStore.feed.collectAsState()
+    val scanInfo by ReelStore.scanInfo.collectAsState()
 
     Column(
-        Modifier.fillMaxSize().systemBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 16.dp),
+        Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(22.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -142,6 +165,7 @@ fun Home(serviceOn: Boolean, openSettings: () -> Unit) {
                 val tl = Offset(stroke / 2, stroke / 2)
                 val sz = Size(size.width - stroke, size.height - stroke)
                 drawArc(Line, 135f, 270f, false, tl, sz, style = Stroke(stroke, cap = StrokeCap.Round))
+                if (ratio >= 0.8f && sweep > 0f) drawArc(accent.copy(alpha = glow), 135f, 270f * sweep, false, tl, sz, style = Stroke(stroke + 10.dp.toPx(), cap = StrokeCap.Round))
                 if (sweep > 0f) drawArc(accent, 135f, 270f * sweep, false, tl, sz, style = Stroke(stroke, cap = StrokeCap.Round))
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -190,6 +214,109 @@ fun Home(serviceOn: Boolean, openSettings: () -> Unit) {
         TextButton(onClick = { ReelStore.reset() }) {
             Text("Reset today\u2019s count", fontFamily = Medium, color = TextLo)
         }
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Card).border(1.dp, Line, RoundedCornerShape(20.dp)).padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Feed videos", fontFamily = Medium, fontSize = 15.sp, color = TextHi)
+                Text("Experimental \u00b7 videos that played while scrolling", fontSize = 12.sp, color = TextLo)
+            }
+            Text("$feed", fontFamily = Light, fontSize = 34.sp, color = TextHi)
+        }
+        Text("Video scan: $scanInfo", fontSize = 11.sp, color = TextLo.copy(alpha = 0.7f), textAlign = TextAlign.Center)
         Text("Last swipe seen: $last", fontSize = 11.sp, color = TextLo.copy(alpha = 0.7f), textAlign = TextAlign.Center)
+    }
+}
+
+
+@Composable
+private fun Screen(content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        Modifier.fillMaxSize().systemBarsPadding().verticalScroll(rememberScrollState()).padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp),
+        content = content
+    )
+}
+
+@Composable
+private fun Point(title: String, body: String) {
+    Row(verticalAlignment = Alignment.Top) {
+        Box(Modifier.padding(top = 7.dp).size(8.dp).clip(CircleShape).background(Color(0xFF34D399)))
+        Spacer(Modifier.width(14.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(title, fontFamily = Medium, fontSize = 16.sp, color = TextHi)
+            Text(body, fontSize = 14.sp, color = TextLo, lineHeight = 20.sp)
+        }
+    }
+}
+
+@Composable
+private fun Step(n: Int, text: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(34.dp).clip(CircleShape).border(1.dp, Line, CircleShape), contentAlignment = Alignment.Center) {
+            Text("$n", fontFamily = Medium, fontSize = 15.sp, color = TextHi)
+        }
+        Spacer(Modifier.width(14.dp))
+        Text(text, fontSize = 15.sp, color = TextHi, lineHeight = 21.sp, modifier = Modifier.weight(1f))
+    }
+}
+
+@Composable
+fun Disclosure(onAgree: () -> Unit, onDecline: () -> Unit) {
+    Screen {
+        Spacer(Modifier.height(16.dp))
+        Text("REELGUARD", fontFamily = Medium, fontSize = 13.sp, letterSpacing = 3.sp, color = TextLo)
+        Text("Your privacy comes first", fontFamily = Light, fontSize = 34.sp, color = TextHi, lineHeight = 40.sp)
+        Text(
+            "To count your reels, ReelGuard needs Android\u2019s Accessibility permission. Here is exactly how it is used.",
+            fontSize = 15.sp, color = TextLo, lineHeight = 22.sp
+        )
+        Point("What it watches", "Only swipes inside Instagram, YouTube, Facebook and TikTok. Every other app is ignored.")
+        Point("What it never reads", "Your messages, passwords, or payment details. It does not look at them, store them or share them.")
+        Point("What it briefly sees", "Inside those apps it may glance at on-screen labels, such as a video caption, only to tell one video from the next. Nothing on screen is saved.")
+        Point("Stays on your phone", "ReelGuard has no internet access and no account. Your counts never leave this device.")
+        Spacer(Modifier.height(8.dp))
+        Button(
+            onClick = onAgree, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(14.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF34D399), contentColor = Bg)
+        ) { Text("Agree and continue", fontFamily = Medium, fontSize = 16.sp) }
+        TextButton(onClick = onDecline, modifier = Modifier.fillMaxWidth()) { Text("Not now", fontFamily = Medium, color = TextLo) }
+    }
+}
+
+@Composable
+fun Setup(openSettings: () -> Unit, onSkip: () -> Unit) {
+    val ctx = LocalContext.current
+    var ready by remember { mutableStateOf(false) }
+    var tts by remember { mutableStateOf<TextToSpeech?>(null) }
+    DisposableEffect(Unit) {
+        val t = TextToSpeech(ctx) { status -> ready = status == TextToSpeech.SUCCESS }
+        tts = t
+        onDispose { t.stop(); t.shutdown() }
+    }
+    val script = "To turn on ReelGuard, follow three steps. One: tap Open settings. " +
+        "Two: find ReelGuard in the list of installed apps. " +
+        "Three: switch it on, then tap Allow. After that, come back to ReelGuard."
+    Screen {
+        Spacer(Modifier.height(16.dp))
+        Text("REELGUARD", fontFamily = Medium, fontSize = 13.sp, letterSpacing = 3.sp, color = TextLo)
+        Text("Turn on tracking", fontFamily = Light, fontSize = 34.sp, color = TextHi)
+        Text("Android requires you to switch this on yourself. It takes about 20 seconds.", fontSize = 15.sp, color = TextLo, lineHeight = 22.sp)
+        Spacer(Modifier.height(4.dp))
+        Step(1, "Tap Open settings below.")
+        Step(2, "Find ReelGuard under Installed apps or Downloaded apps.")
+        Step(3, "Switch it on, then tap Allow. Come back here afterwards.")
+        Spacer(Modifier.height(8.dp))
+        Button(
+            onClick = openSettings, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(14.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF34D399), contentColor = Bg)
+        ) { Text("Open settings", fontFamily = Medium, fontSize = 16.sp) }
+        OutlinedButton(
+            onClick = { tts?.speak(script, TextToSpeech.QUEUE_FLUSH, null, "guide") },
+            enabled = ready, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(14.dp),
+            border = BorderStroke(1.dp, Line)
+        ) { Text("Play audio guide", fontFamily = Medium, fontSize = 16.sp, color = TextHi) }
+        TextButton(onClick = onSkip, modifier = Modifier.fillMaxWidth()) { Text("Skip for now", fontFamily = Medium, color = TextLo) }
     }
 }
